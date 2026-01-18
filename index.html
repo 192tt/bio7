@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bio-Lab Ultimate: 生物全机能模拟</title>
+    <style>
+        /* ========================================= */
+        /* === 全局基础 & 导航菜单样式 === */
+        /* ========================================= */
+        :root {
+            --bg-dark: #121212; --panel-bg: #1e1e1e; --text-main: #e0e0e0;
+            /* 植物版变量 */
+            --soil-color: #5d4037; --bg-top: #e0f7fa; --bg-bot: #81d4fa; 
+            --stem-base: #66bb6a; --leaf-base: #4caf50; --primary: #2196f3;
+            --photo-color: #76ff03; --resp-color: #ff3d00;
+            /* 人体版变量 */
+            --col-heart: #ef5350; --col-lung: #42a5f5; --col-stomach: #ffa726; 
+            --col-kidney: #8d6e63; --col-bladder: #fdd835; --col-brain: #ab47bc;
+        }
+        body { margin: 0; font-family: 'Segoe UI', Roboto, sans-serif; overflow: hidden; background: var(--bg-dark); color: var(--text-main); }
+        
+        /* 导航菜单层 */
+        #menu-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #0d47a1, #1b5e20);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 999; transition: transform 0.6s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+        }
+        .menu-grid { display: flex; gap: 40px; }
+        .menu-card {
+            width: 260px; height: 340px; background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 20px;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            cursor: pointer; transition: 0.3s; padding: 20px; text-align: center; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3); backdrop-filter: blur(10px);
+        }
+        .menu-card:hover { transform: translateY(-15px) scale(1.05); background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.5); }
+        .icon { font-size: 5rem; margin-bottom: 20px; filter: drop-shadow(0 0 10px rgba(255,255,255,0.3)); }
+        
+        /* 通用返回按钮 */
+        .back-btn {
+            position: absolute; top: 20px; left: 20px; z-index: 100;
+            background: rgba(0,0,0,0.6); color: white; border: 1px solid rgba(255,255,255,0.2);
+            padding: 8px 16px; border-radius: 30px; cursor: pointer; font-weight: bold;
+            transition: 0.2s; backdrop-filter: blur(5px);
+        }
+        .back-btn:hover { background: rgba(255,255,255,0.3); }
+
+        /* 视图容器通用 */
+        .lab-view { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; }
+
+        /* ========================================= */
+        /* ===  植物实验室 V5 (移植样式)  === */
+        /* ========================================= */
+        #view-plant { display: none; flex-direction: row; background: #263238; }
+        
+        .p-visual-area { 
+            flex: 3; position: relative; 
+            background: linear-gradient(to bottom, var(--bg-top), var(--bg-bot)); 
+            overflow: hidden; display: flex; justify-content: center; 
+        }
+
+        /* 植物组件 */
+        .sun { position: absolute; top: 20px; right: 20px; font-size: 3rem; opacity: 0.8; transition: opacity 0.3s, transform 0.3s; }
+        .soil { position: absolute; bottom: 0; width: 100%; height: 150px; background: rgba(93, 64, 55, 0.9); border-top: 8px solid #3e2723; z-index: 10; display: flex; justify-content: center; align-items: center; color: rgba(255,255,255,0.5); font-weight: bold; letter-spacing: 1px; }
+        .plant-container { position: absolute; bottom: 80px; width: 30px; height: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; transition: bottom 0.2s linear, transform 1s ease; z-index: 5; transform-origin: bottom center; }
+
+        /* 气泡 */
+        .bubbles { position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 25; opacity: 0; transition: opacity 0.5s;}
+        .bubble { position: absolute; background: rgba(255,255,255,0.7); border-radius: 50%; animation: rise 2s infinite ease-in; bottom: 0; }
+        .b1 { width: 6px; height: 6px; left: -40px; animation-delay: 0s; }
+        .b2 { width: 8px; height: 8px; right: -40px; animation-delay: 0.5s; }
+        .b3 { width: 5px; height: 5px; left: 0px; animation-delay: 1s; }
+        @keyframes rise { 0% { transform: translateY(0) scale(1); opacity: 0; } 50% { opacity: 1; } 100% { transform: translateY(-100px) scale(1.5); opacity: 0; } }
+
+        /* 植物状态 */
+        .healthy .stem { background: var(--stem-base); } .healthy .leaf { background: var(--leaf-base); }
+        .state-wilt .plant-container { transform: rotate(15deg); } 
+        .state-wilt .stem { background: #dce775; } .state-wilt .leaf { background: #cddc39; transform: rotate(80deg) !important; }
+        .state-scorch .plant-container { transform: rotate(25deg); }
+        .state-scorch .stem { background: #ffcc80; } .state-scorch .leaf { background: #ffb74d; transform: scale(0.8); }
+        .state-rot .stem { background: #33691e; } .state-rot .leaf { background: #2e7d32; filter: brightness(0.6); }
+        .state-freeze .plant-container { filter: drop-shadow(0 0 5px #e0f7fa) hue-rotate(180deg); }
+
+        /* 植物生长部件 */
+        .seed { width: 36px; height: 24px; background: #795548; border-radius: 50%; position: absolute; bottom: 0; border: 2px solid #4e342e; transition: all 0.5s; z-index: 2; }
+        .stem { width: 14px; background: var(--stem-base); height: 0; border-radius: 20px; position: relative; transition: height 0.1s linear, background 0.5s; z-index: 1; }
+        .leaf { position: absolute; width: 0; height: 0; background: var(--leaf-base); border-radius: 0 50% 0 50%; transition: all 0.5s ease; opacity: 0; z-index: 3; }
+        .leaf.left { left: -50px; top: 10%; transform: rotate(-45deg); transform-origin: right bottom;}
+        .leaf.right { right: -50px; top: 30%; transform: rotate(-45deg) scaleX(-1); transform-origin: left bottom;}
+        .flower { position: absolute; top: -60px; width: 0; height: 0; opacity: 0; transition: all 0.5s; z-index: 20; }
+        .flower-center { width: 36px; height: 36px; background: #ffd54f; border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 2; box-shadow: 0 0 10px #ffeb3b; }
+        .petals { width: 100%; height: 100%; position: absolute; }
+        .petal { position: absolute; width: 20px; height: 50px; background: #ff7043; border-radius: 50%; top: 50%; left: 50%; transform-origin: center bottom; }
+
+        /* 植物控制台 */
+        .p-controls { flex: 1; background: #eceff1; padding: 25px; display: flex; flex-direction: column; gap: 15px; z-index: 20; box-shadow: -5px 0 30px rgba(0,0,0,0.3); overflow-y: auto; color: #333; }
+        
+        .monitor-panel { background: #263238; color: #eceff1; padding: 15px; border-radius: 12px; box-shadow: inset 0 0 10px rgba(0,0,0,0.5); }
+        .monitor-header { display: flex; justify-content: space-between; margin-bottom: 10px; font-weight: bold; color: #b0bec5; font-size: 0.9rem;}
+        
+        .bio-gauge { margin-bottom: 12px; }
+        .gauge-label { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px; }
+        .gauge-bg { height: 8px; background: #455a64; border-radius: 4px; overflow: hidden; }
+        .gauge-fill { height: 100%; width: 0%; transition: width 0.3s ease-out; }
+        .fill-photo { background: var(--photo-color); box-shadow: 0 0 8px var(--photo-color); }
+        .fill-resp { background: var(--resp-color); box-shadow: 0 0 8px var(--resp-color); }
+        .gauge-val { font-family: monospace; font-weight: bold; }
+        .val-photo { color: var(--photo-color); } .val-resp { color: var(--resp-color); }
+
+        .total-progress-bg { height: 12px; background: #455a64; border-radius: 6px; overflow: hidden; margin-top: 15px; border: 1px solid #546e7a;}
+        .total-progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #66bb6a, #43a047); transition: width 0.2s; }
+        
+        .p-control-group { background: #fff; padding: 12px 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .p-control-group label { display: flex; justify-content: space-between; font-weight: bold; color: #546e7a; margin-bottom: 8px; font-size: 0.9rem; }
+        input[type=range] { width: 100%; cursor: pointer; height: 6px; }
+
+        .btn-start { padding: 15px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 1.2rem; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px rgba(33, 150, 243, 0.3); transition: all 0.2s; }
+        .btn-start:hover { background: #1976d2; transform: translateY(-2px);}
+        .btn-start:disabled { background: #b0bec5; cursor: not-allowed; transform: none; box-shadow: none;}
+        .btn-reset { margin-top: auto; padding: 12px; border: 2px solid #d32f2f; background: transparent; color: #d32f2f; border-radius: 8px; cursor: pointer; font-weight: bold; transition: all 0.2s;}
+        .btn-reset:hover { background: #ffebee; color: #b71c1c; }
+
+        /* ========================================= */
+        /* ===  人体实验室 Pro (保留样式)  === */
+        /* ========================================= */
+        #view-human { display: none; flex-direction: row; background: #000; }
+        
+        .h-visual { flex: 2; position: relative; background: radial-gradient(circle at 50% 50%, #2c3e50, #000000); overflow: hidden; display: flex; justify-content: center; align-items: center; }
+        .h-panel { flex: 1; background: var(--panel-bg); border-left: 1px solid #333; padding: 20px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
+
+        /* 人体结构 */
+        .body-silhouette { position: relative; width: 360px; height: 650px; background: rgba(255, 255, 255, 0.03); border: 2px solid rgba(255, 255, 255, 0.1); border-radius: 100px 100px 40px 40px; box-shadow: inset 0 0 50px rgba(0,0,0,0.5); }
+        .brain-box { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 80px; height: 60px; z-index: 20; display: flex; justify-content: center; align-items: center; }
+        .brain { width: 70px; height: 50px; background: #4a148c; opacity: 0.6; border-radius: 35px 35px 20px 20px; box-shadow: 0 0 20px var(--col-brain); transition: all 0.5s; }
+        .brain.stress { animation: pulse-stress 0.5s infinite; background: #ff0000; box-shadow: 0 0 30px red; }
+        @keyframes pulse-stress { 0% {transform: scale(1);} 50% {transform: scale(1.1);} 100% {transform: scale(1);} }
+
+        .lungs-container { position: absolute; top: 100px; width: 100%; display: flex; justify-content: center; gap: 10px; z-index: 5; }
+        .lung { width: 60px; height: 100px; background: var(--col-lung); border-radius: 30px 30px 10px 60px; opacity: 0.7; transform-origin: top center; transition: transform 0.2s ease-in-out; box-shadow: inset 0 0 20px rgba(0,0,0,0.3); }
+        .lung.right { transform: scaleX(-1); }
+
+        .heart-container { position: absolute; top: 150px; left: 50%; transform: translateX(-50%); z-index: 15; }
+        .heart { width: 50px; height: 50px; background: var(--col-heart); border-radius: 50%; box-shadow: 0 0 20px var(--col-heart); position: relative; }
+        .heart::before, .heart::after { content: ""; position: absolute; width: 50px; height: 50px; background: inherit; border-radius: 50%; }
+        .heart::before { top: -25px; left: 0; } .heart::after { top: 0; left: 25px; }
+
+        .vascular-system { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; opacity: 0.6; }
+        .vessel-path { fill: none; stroke-width: 4; stroke-linecap: round; transition: stroke 1s; }
+
+        .stomach-container { position: absolute; top: 240px; left: 55%; transform: translateX(-50%) rotate(10deg); width: 70px; height: 50px; background: #3e2723; border-radius: 20px 20px 50px 50px; border: 2px solid #5d4037; overflow: hidden; z-index: 10; }
+        .stomach-acid { position: absolute; bottom: 0; width: 100%; height: 0%; background: linear-gradient(to top, #e65100, #ff9800); opacity: 0.8; transition: height 0.5s; box-shadow: 0 0 15px #e65100; }
+        .particle { position: absolute; width: 6px; height: 6px; border-radius: 50%; pointer-events: none; }
+
+        .kidney { position: absolute; top: 310px; width: 30px; height: 45px; background: var(--col-kidney); border-radius: 15px; box-shadow: inset 3px 3px 5px rgba(0,0,0,0.5); z-index: 8; }
+        .bladder-container { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); width: 50px; height: 50px; background: #424242; border-radius: 50%; border: 2px solid #616161; overflow: hidden; z-index: 8; }
+        .urine { position: absolute; bottom: 0; width: 100%; height: 0%; background: var(--col-bladder); transition: height 0.3s; opacity: 0.9; }
+        .ureter { position: absolute; top: 350px; width: 4px; height: 160px; background: rgba(255,255,255,0.1); left: 50%; z-index: 1; }
+
+        /* 人体面板 */
+        .h-panel h2 { border-bottom: 2px solid #444; padding-bottom: 10px; margin-top: 0; color: #90caf9; display: flex; justify-content: space-between; align-items: center;}
+        .h-group { background: #263238; padding: 15px; border-radius: 10px; margin-bottom: 10px; }
+        .h-label { color: #b0bec5; font-size: 0.85rem; display: flex; justify-content: space-between; margin-bottom: 5px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        .stat-box { background: #37474f; padding: 10px; border-radius: 8px; text-align: center; position: relative; overflow: hidden;}
+        .stat-val { font-size: 1.4rem; font-weight: bold; position: relative; z-index: 2;}
+        .stat-name { font-size: 0.75rem; color: #90a4ae; position: relative; z-index: 2;}
+        .stat-bar { position: absolute; bottom: 0; left: 0; height: 4px; width: 100%; background: #546e7a; }
+        .stat-fill { height: 100%; width: 50%; transition: width 0.3s; }
+        
+        .action-btn { width: 100%; padding: 10px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 5px; transition: 0.2s; color: #fff; }
+        .btn-eat { background: #ef6c00; } .btn-eat:hover { background: #e65100; }
+        .btn-pee { background: #fbc02d; color: #333; } .btn-pee:hover { background: #f9a825; }
+        .overlay-status { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); padding: 20px 40px; border-radius: 10px; text-align: center; border: 2px solid red; display: none; z-index: 100; }
+
+    </style>
+</head>
+<body>
+
+    <div id="menu-overlay">
+        <h1 style="font-size: 3rem; margin-bottom: 40px; text-shadow: 0 5px 15px rgba(0,0,0,0.5);">🧬 Bio-Lab Ultimate</h1>
+        <div class="menu-grid">
+            <div class="menu-card" onclick="app.switchMode('plant')" style="border-color: #66bb6a;">
+                <div class="icon">🌱</div>
+                <h3>植物生理实验室 V5</h3>
+                <p style="font-size:0.9rem; color:#ccc;">光合与呼吸作用的深度模拟。<br>(Q10温度系数 & 限制因子)</p>
+            </div>
+            <div class="menu-card" onclick="app.switchMode('human')" style="border-color: #ef5350;">
+                <div class="icon">🫀</div>
+                <h3>人体机能实验室 Pro</h3>
+                <p style="font-size:0.9rem; color:#ccc;">循环、消化与排泄系统。<br>(实时流体与粒子特效)</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-plant" class="lab-view">
+        <button class="back-btn" onclick="app.goHome()">⬅ 返回大厅</button>
+        
+        <div class="p-visual-area">
+            <div class="sun" id="sun-icon">☀️</div>
+            <div id="plant-wrapper" class="healthy">
+                <div class="plant-container" id="plant">
+                    <div class="bubbles" id="bubbles">
+                        <div class="bubble b1"></div>
+                        <div class="bubble b2"></div>
+                        <div class="bubble b3"></div>
+                    </div>
+                    <div class="flower">
+                        <div class="flower-center"></div>
+                        <div class="petals">
+                            <div class="petal" style="transform: translate(-50%, -100%) rotate(0deg)"></div>
+                            <div class="petal" style="transform: translate(-50%, -100%) rotate(45deg)"></div>
+                            <div class="petal" style="transform: translate(-50%, -100%) rotate(90deg)"></div>
+                            <div class="petal" style="transform: translate(-50%, -100%) rotate(135deg)"></div>
+                            <div class="petal" style="transform: translate(-50%, -100%) rotate(180deg)"></div>
+                            <div class="petal" style="transform: translate(-50%, -100%) rotate(225deg)"></div>
+                            <div class="petal" style="transform: translate(-50%, -100%) rotate(270deg)"></div>
+                            <div class="petal" style="transform: translate(-50%, -100%) rotate(315deg)"></div>
+                        </div>
+                    </div>
+                    <div class="leaf left" id="leaf1"></div>
+                    <div class="leaf right" id="leaf2"></div>
+                    <div class="stem" id="stem"></div>
+                    <div class="seed" id="seed"></div>
+                </div>
+            </div>
+            <div class="soil">↓ 土壤深层 ↓</div>
+        </div>
+
+        <div class="p-controls">
+            <h2 style="color:#37474f;">📊 生理机能监控 V5</h2>
+            
+            <div class="monitor-panel">
+                <div class="monitor-header">
+                    <span>生理指标监控</span>
+                    <span id="status-text">等待实验...</span>
+                </div>
+                
+                <div class="bio-gauge">
+                    <div class="gauge-label">
+                        <span>☀️ 光合作用 (制造养分)</span>
+                        <span class="gauge-val val-photo" id="txt-photo">0%</span>
+                    </div>
+                    <div class="gauge-bg"><div class="gauge-fill fill-photo" id="bar-photo"></div></div>
+                </div>
+
+                <div class="bio-gauge">
+                    <div class="gauge-label">
+                        <span>🔥 呼吸作用 (消耗养分)</span>
+                        <span class="gauge-val val-resp" id="txt-resp">基础代谢</span>
+                    </div>
+                    <div class="gauge-bg"><div class="gauge-fill fill-resp" id="bar-resp"></div></div>
+                </div>
+
+                <div class="total-progress-bg"><div class="total-progress-fill" id="progress-bar"></div></div>
+                <div style="text-align: center; font-size: 0.8rem; color: #b0bec5; margin-top: 5px;">总生长进度 (净积累量)</div>
+            </div>
+
+            <button class="btn-start" id="btn-start" onclick="PlantLab.start()">▶ 启动实验</button>
+
+            <div class="p-control-group">
+                <label><span>🌞 光照 (Light)</span><span id="val-light">80%</span></label>
+                <input type="range" id="input-light" min="0" max="100" value="80">
+            </div>
+            <div class="p-control-group">
+                <label><span>💧 水分 (Water)</span><span id="val-water">50%</span></label>
+                <input type="range" id="input-water" min="0" max="100" value="50">
+            </div>
+            <div class="p-control-group">
+                <label><span>🌡️ 温度 (Temp)</span><span id="val-temp">25°C</span></label>
+                <input type="range" id="input-temp" min="-5" max="45" value="25">
+            </div>
+
+            <button class="btn-reset" onclick="PlantLab.reset()">↺ 重置实验</button>
+        </div>
+    </div>
+
+    <div id="view-human" class="lab-view">
+        <button class="back-btn" onclick="app.goHome()">⬅ 返回大厅</button>
+        
+        <div class="h-visual">
+            <div class="body-silhouette">
+                <div class="brain-box"><div class="brain" id="h-brain"></div></div>
+                <div id="brain-msg" style="position:absolute; top:-40px; width:100%; text-align:center; color:#e040fb; font-weight:bold; opacity:0; transition:0.3s;">⚠️ 缺氧眩晕</div>
+
+                <div class="lungs-container">
+                    <div class="lung left" id="lung-l"></div>
+                    <div class="lung right" id="lung-r"></div>
+                </div>
+
+                <svg class="vascular-system" viewBox="0 0 360 650">
+                    <path class="vessel-path artery" d="M180 175 Q240 120 280 200 T300 350" stroke="#ef5350" />
+                    <path class="vessel-path artery" d="M180 175 Q120 120 80 200 T60 350" stroke="#ef5350" />
+                    <path class="vessel-path vein" d="M180 175 L180 100" stroke="#42a5f5" />
+                    <path class="vessel-path vein" d="M180 175 L180 300" stroke="#42a5f5" />
+                </svg>
+                <div class="heart-container"><div class="heart" id="h-heart"></div></div>
+
+                <div class="stomach-container"><div class="stomach-acid" id="h-stomach-acid"></div></div>
+                <div id="particles-layer" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:20;"></div>
+
+                <div class="kidney" style="left:110px;"></div>
+                <div class="kidney" style="right:110px;"></div>
+                <div class="ureter" style="transform: rotate(-10deg) translateX(-20px);"></div>
+                <div class="ureter" style="transform: rotate(10deg) translateX(20px);"></div>
+                <div class="bladder-container"><div class="urine" id="h-urine"></div></div>
+            </div>
+
+            <div class="overlay-status" id="h-overlay">
+                <h1 style="color:red; margin:0;">SYSTEM FAILURE</h1>
+                <p id="h-fail-reason" style="color:white;">原因未知</p>
+                <button class="action-btn" style="background:#444;" onclick="HumanLab.reset()">⚡ 电击复苏 (重置)</button>
+            </div>
+        </div>
+
+        <div class="h-panel">
+            <h2><span>🧬 人体监控</span> <span id="sys-status" style="font-size:0.8rem; color:#66bb6a;">● 正常</span></h2>
+            
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-val" id="val-o2" style="color:var(--col-lung)">98%</div>
+                    <div class="stat-name">🩸 血氧饱和度</div>
+                    <div class="stat-bar"><div class="stat-fill" id="bar-o2" style="background:var(--col-lung)"></div></div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-val" id="val-en" style="color:var(--col-stomach)">100%</div>
+                    <div class="stat-name">⚡ 能量储备</div>
+                    <div class="stat-bar"><div class="stat-fill" id="bar-en" style="background:var(--col-stomach)"></div></div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-val" id="val-bpm" style="color:var(--col-heart)">75</div>
+                    <div class="stat-name">💓 心率 (BPM)</div>
+                    <div class="stat-bar"><div class="stat-fill" id="bar-bpm" style="background:var(--col-heart); width:30%"></div></div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-val" id="val-tox" style="color:var(--col-bladder)">0%</div>
+                    <div class="stat-name">☣️ 血液毒素</div>
+                    <div class="stat-bar"><div class="stat-fill" id="bar-tox" style="background:var(--col-bladder); width:0%"></div></div>
+                </div>
+            </div>
+
+            <div class="h-group">
+                <div class="h-label"><span>🏃 运动强度</span><span id="txt-act">休息</span></div>
+                <input type="range" id="in-act" min="0" max="100" value="0">
+            </div>
+
+            <div class="h-group">
+                <div class="h-label"><span>🥪 消化系统</span></div>
+                <button class="action-btn btn-eat" onclick="HumanLab.eat()">🍔 进食</button>
+                <div style="margin-top:8px; font-size:0.8rem; color:#aaa; display:flex; justify-content:space-between;">
+                    <span>胃部填充: <span id="val-stomach">0%</span></span>
+                    <span id="digest-status">空闲</span>
+                </div>
+            </div>
+
+            <div class="h-group">
+                <div class="h-label"><span>💧 泌尿系统</span></div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                    <span>饮水摄入: <span id="val-h2o">50%</span></span>
+                </div>
+                <input type="range" id="in-h2o" min="0" max="100" value="50">
+                <div style="margin-top:10px; display:flex; gap:10px; align-items:center;">
+                    <div style="flex:1; height:20px; background:#333; border-radius:4px; position:relative; overflow:hidden;">
+                        <div id="bar-bladder" style="height:100%; width:0%; background:yellow;"></div>
+                        <span style="position:absolute; left:5px; top:1px; font-size:0.7rem; color:#000; font-weight:bold;">膀胱容量</span>
+                    </div>
+                    <button class="action-btn btn-pee" style="width:auto; margin:0;" onclick="HumanLab.pee()">🚽 排尿</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // === App 核心控制器 ===
+        const app = {
+            switchMode: (mode) => {
+                document.getElementById('menu-overlay').style.transform = 'translateY(-100%)';
+                document.querySelectorAll('.lab-view').forEach(el => el.style.display = 'none');
+                if (mode === 'plant') {
+                    document.getElementById('view-plant').style.display = 'flex';
+                    // 初始化但不立即开始（让用户点按钮）
+                } else {
+                    document.getElementById('view-human').style.display = 'flex';
+                    HumanLab.init();
+                }
+            },
+            goHome: () => {
+                document.getElementById('menu-overlay').style.transform = 'translateY(0)';
+                PlantLab.stop();
+                HumanLab.stop();
+            }
+        };
+
+        // ============================================
+        // === 植物实验室 V5 核心逻辑 (完整保留) ===
+        // ============================================
+        const PlantLab = (() => {
+            // === 核心状态 ===
+            let state = { growth: 0, isRunning: false, isDead: false, water: 50, temp: 25, light: 80 };
+            let bioRates = { photo: 0, resp: 0 };
+            let timer = null;
+
+            // === DOM 缓存 ===
+            let ui = {};
+            const cacheDOM = () => {
+                ui = {
+                    wrapper: document.getElementById('plant-wrapper'),
+                    plant: document.getElementById('plant'),
+                    stem: document.getElementById('stem'), seed: document.getElementById('seed'),
+                    l1: document.getElementById('leaf1'), l2: document.getElementById('leaf2'),
+                    flower: document.querySelector('.flower'), bubbles: document.getElementById('bubbles'),
+                    sun: document.getElementById('sun-icon'),
+
+                    status: document.getElementById('status-text'),
+                    progBar: document.getElementById('progress-bar'),
+                    btn: document.getElementById('btn-start'),
+                    
+                    barPhoto: document.getElementById('bar-photo'), txtPhoto: document.getElementById('txt-photo'),
+                    barResp: document.getElementById('bar-resp'), txtResp: document.getElementById('txt-resp'),
+                    
+                    inLight: document.getElementById('input-light'), valLight: document.getElementById('val-light'),
+                    inWater: document.getElementById('input-water'), valWater: document.getElementById('val-water'),
+                    inTemp: document.getElementById('input-temp'), valTemp: document.getElementById('val-temp')
+                };
+            };
+
+            function calculateBioRates() {
+                // A. 计算呼吸作用 (Respiration) - 主要受温度影响 (Q10原理)
+                let r_temp = 0;
+                if (state.temp > 0 && state.temp <= 45) {
+                    r_temp = Math.pow((state.temp / 40), 2); 
+                }
+                bioRates.resp = 0.05 + r_temp * 0.8; 
+                if (bioRates.resp > 1) bioRates.resp = 1;
+
+                // B. 计算光合作用 (Photosynthesis) - 受光、水、温、叶面积共同限制
+                let p_light = state.light / 100; // 光照因子
+                
+                let p_water = 0; // 水分因子
+                if (state.water > 10 && state.water < 90) {
+                    p_water = 1 - Math.abs(state.water - 55) / 45;
+                }
+                
+                let p_temp = 0; // 温度因子
+                if (state.temp > 5 && state.temp < 40) {
+                    p_temp = 1 - Math.abs(state.temp - 25) / 20;
+                }
+
+                let p_leaf = 0; // 叶面积因子
+                if (state.growth > 40) {
+                    p_leaf = (state.growth - 40) / 60;
+                } else if (state.growth > 10) { p_leaf = 0.1; }
+
+                // 限制因子定律：最弱的因子决定上限
+                let potential = p_light * p_water * p_temp;
+                bioRates.photo = potential * p_leaf * 1.2;
+                if (bioRates.photo > 1) bioRates.photo = 1;
+            }
+
+            function update() {
+                // 读取输入
+                state.light = parseInt(ui.inLight.value);
+                state.water = parseInt(ui.inWater.value);
+                state.temp = parseInt(ui.inTemp.value);
+                
+                ui.valLight.innerText = state.light + "%"; ui.valWater.innerText = state.water + "%"; ui.valTemp.innerText = state.temp + "°C";
+                ui.sun.style.opacity = 0.2 + (state.light / 100) * 0.8;
+
+                if (!state.isRunning || state.isDead) return;
+
+                calculateBioRates();
+
+                // 净生长计算
+                let netRate = (bioRates.photo * 1.5 - bioRates.resp) * 0.3;
+                
+                // 致死判定
+                if (state.temp > 42) { kill("热休克致死"); return; }
+                if (state.temp < -2) { kill("严重冻害致死"); return; }
+                if (state.water > 98 && state.temp > 30) { kill("高温高湿烂根"); return; }
+
+                state.growth += netRate;
+                if (state.growth > 100) state.growth = 100;
+                if (state.growth < 0) state.growth = 0;
+
+                updateGauges();
+                updatePlantVisuals();
+                drawPlantGrowth();
+
+                if(state.growth >= 100) {
+                    ui.status.innerText = "✅ 成熟"; ui.status.style.color = "#76ff03";
+                }
+            }
+
+            function updateGauges() {
+                let p_pct = Math.round(bioRates.photo * 100);
+                ui.barPhoto.style.width = p_pct + "%";
+                let p_txt = p_pct > 80 ? "强" : (p_pct > 40 ? "中" : "弱");
+                ui.txtPhoto.innerText = p_pct + "% - " + p_txt;
+                ui.bubbles.style.opacity = bioRates.photo > 0.5 ? (bioRates.photo - 0.5) * 2 : 0;
+
+                let r_pct = Math.round(bioRates.resp * 100);
+                ui.barResp.style.width = r_pct + "%";
+                let r_txt = r_pct > 70 ? "极高" : (r_pct > 40 ? "高" : (r_pct > 15 ? "中" : "低"));
+                ui.txtResp.innerText = r_pct + "% - " + r_txt;
+
+                ui.progBar.style.width = state.growth + "%";
+
+                if (bioRates.photo > bioRates.resp * 1.1) {
+                    ui.status.innerText = "🟢 养分积累中"; ui.status.style.color = "#76ff03";
+                } else if (bioRates.resp > bioRates.photo) {
+                    ui.status.innerText = "🔴 养分消耗中"; ui.status.style.color = "#ff3d00";
+                } else {
+                    ui.status.innerText = "🟡 收支平衡"; ui.status.style.color = "#ffeb3b";
+                }
+            }
+
+            function updatePlantVisuals() {
+                ui.wrapper.className = ''; 
+                if (state.temp < 10) ui.wrapper.classList.add('state-freeze');
+                else if (state.temp > 32) ui.wrapper.classList.add('state-scorch');
+                else if (state.water < 20) ui.wrapper.classList.add('state-wilt');
+                else if (state.water > 85) ui.wrapper.classList.add('state-rot');
+                else ui.wrapper.classList.add('healthy');
+            }
+
+            function drawPlantGrowth() {
+                const g = state.growth;
+                if (g < 15) {
+                    ui.seed.style.opacity = 1; ui.plant.style.bottom = '80px'; ui.stem.style.height = '0';
+                } else if (g >= 15 && g < 40) {
+                    let up = (g - 15) * 10; ui.plant.style.bottom = (80 + up) + 'px'; ui.stem.style.height = (g - 15) * 3 + 'px';
+                } else if (g >= 40 && g < 80) {
+                    ui.seed.style.opacity = 0; ui.stem.style.height = (75 + (g - 40) * 6) + 'px';
+                    let s = (g - 40) / 40;
+                    ui.l1.style.opacity = 1; ui.l1.style.width = (60 * s) + 'px'; ui.l1.style.height = (30 * s) + 'px';
+                    ui.l2.style.opacity = 1; ui.l2.style.width = (60 * s) + 'px'; ui.l2.style.height = (30 * s) + 'px';
+                } else {
+                    ui.stem.style.height = '320px';
+                    let s = (g - 80) / 20;
+                    ui.flower.style.opacity = 1; ui.flower.style.transform = `scale(${1 + s * 0.5})`;
+                }
+            }
+
+            function kill(reason) {
+                state.isDead = true;
+                ui.btn.innerText = "💀 植物死亡";
+                ui.status.innerText = reason; ui.status.style.color = "red";
+                ui.barPhoto.style.width = 0; ui.barResp.style.width = 0;
+            }
+
+            return {
+                start: () => {
+                    cacheDOM();
+                    if (state.isRunning) return;
+                    state.isRunning = true;
+                    ui.btn.disabled = true; ui.btn.innerText = "实验运行中...";
+                    ui.status.innerText = "监测中...";
+                    if(!timer) timer = setInterval(update, 100);
+                },
+                stop: () => {
+                    if(timer) clearInterval(timer);
+                    timer = null;
+                },
+                reset: () => {
+                    cacheDOM();
+                    state = { growth: 0, isRunning: false, isDead: false, water: 50, temp: 25, light: 80 };
+                    bioRates = { photo: 0, resp: 0 };
+                    ui.inWater.value = 50; ui.inTemp.value = 25; ui.inLight.value = 80;
+                    ui.btn.disabled = false; ui.btn.innerText = "▶ 启动实验";
+                    ui.status.innerText = "等待实验..."; ui.status.style.color = "#b0bec5";
+                    ui.progBar.style.width = '0%'; ui.barPhoto.style.width = '0%'; ui.barResp.style.width = '0%';
+                    ui.bubbles.style.opacity = 0;
+                    updatePlantVisuals();
+                    drawPlantGrowth();
+                    // 刷新一次UI显示
+                    ui.valLight.innerText = "80%"; ui.valWater.innerText = "50%"; ui.valTemp.innerText = "25°C";
+                }
+            };
+        })();
+
+        // ============================================
+        // === 人体实验室 V2 Pro 核心逻辑 ===
+        // ============================================
+        const HumanLab = (() => {
+            let state = { oxygen: 98, energy: 80, toxic: 0, heartRate: 75, stomachContent: 0, bladderLevel: 0, isDead: false };
+            let timer = null;
+            let ui = {};
+
+            const cacheDOM = () => {
+                ui = {
+                    lungs: [document.getElementById('lung-l'), document.getElementById('lung-r')],
+                    heart: document.getElementById('h-heart'),
+                    brain: document.getElementById('h-brain'),
+                    brainMsg: document.getElementById('brain-msg'),
+                    acid: document.getElementById('h-stomach-acid'),
+                    urine: document.getElementById('h-urine'),
+                    vessels: document.querySelectorAll('.artery'), 
+                    valO2: document.getElementById('val-o2'), barO2: document.getElementById('bar-o2'),
+                    valEn: document.getElementById('val-en'), barEn: document.getElementById('bar-en'),
+                    valBpm: document.getElementById('val-bpm'), barBpm: document.getElementById('bar-bpm'),
+                    valTox: document.getElementById('val-tox'), barTox: document.getElementById('bar-tox'),
+                    valStomach: document.getElementById('val-stomach'), digestTxt: document.getElementById('digest-status'),
+                    barBladder: document.getElementById('bar-bladder'),
+                    valWater: document.getElementById('val-h2o'),
+                    inputAct: document.getElementById('in-act'),
+                    inputWater: document.getElementById('in-h2o'),
+                    overlay: document.getElementById('h-overlay'),
+                    failReason: document.getElementById('h-fail-reason'),
+                    statusTxt: document.getElementById('sys-status'),
+                    particleLayer: document.getElementById('particles-layer')
+                };
+            };
+
+            function spawnParticle(type, startX, startY) {
+                const p = document.createElement('div');
+                p.className = 'particle';
+                p.style.left = startX + 'px'; p.style.top = startY + 'px';
+                if(type === 'food') {
+                    p.style.background = '#ffd54f';
+                    ui.particleLayer.appendChild(p);
+                    setTimeout(() => { p.style.transition = 'all 1s'; p.style.top = '150px'; p.style.left = '180px'; p.style.opacity = 0; }, 50);
+                } else if (type === 'urine') {
+                    p.style.background = '#ffeb3b';
+                    p.style.width = '4px'; p.style.height = '4px';
+                    ui.particleLayer.appendChild(p);
+                    setTimeout(() => { p.style.transition = 'all 0.8s linear'; p.style.top = '570px'; p.style.left = (170 + Math.random()*20) + 'px'; }, 50);
+                    setTimeout(() => p.style.opacity = 0, 750);
+                }
+                setTimeout(() => p.remove(), 1000);
+            }
+
+            function updateVisuals(waterIn) {
+                let breathDuration = 60 / (12 + (state.heartRate - 60)/4); 
+                ui.lungs.forEach(l => l.style.transition = `transform ${breathDuration/2}s ease-in-out`);
+                ui.heart.style.animation = `heartbeat ${60/state.heartRate}s infinite`;
+
+                let r = 106 + (state.oxygen/100)*133;
+                let g = 27 + (state.oxygen/100)*56;
+                let b = 154 - (state.oxygen/100)*74;
+                let color = `rgb(${r},${g},${b})`;
+                ui.vessels.forEach(v => v.setAttribute('stroke', color));
+                ui.heart.style.background = color;
+                ui.heart.style.boxShadow = `0 0 20px ${color}`;
+
+                ui.acid.style.height = state.stomachContent + "%";
+                ui.urine.style.height = state.bladderLevel + "%";
+
+                if (state.heartRate > 40 && waterIn > 5) {
+                    let chance = waterIn / 100; 
+                    if (Math.random() < chance * 0.3) { spawnParticle('urine', 115, 330); }
+                    if (Math.random() < chance * 0.3) { spawnParticle('urine', 245, 330); }
+                }
+            }
+
+            function loop() {
+                if (state.isDead) return;
+                let activity = parseInt(ui.inputAct.value);
+                let waterIn = parseInt(ui.inputWater.value);
+                document.getElementById('txt-act').innerText = activity < 20 ? "休息" : (activity < 70 ? "有氧运动" : "无氧冲刺");
+                ui.valWater.innerText = waterIn + "%"; 
+
+                let targetBpm = 60 + activity * 1.4;
+                if (state.oxygen < 80) targetBpm += (80 - state.oxygen);
+                state.heartRate += (targetBpm - state.heartRate) * 0.1;
+
+                let o2Consume = 0.1 + (activity / 150) + (state.heartRate / 500);
+                let o2Supply = 0.15 + (activity / 200); 
+                if (activity > 80) o2Supply -= 0.05; 
+                state.oxygen = Math.min(100, state.oxygen + o2Supply - o2Consume);
+                
+                if (state.stomachContent > 0) {
+                    state.stomachContent -= 0.5;
+                    state.energy = Math.min(100, state.energy + 0.3);
+                    state.toxic += 0.02;
+                    ui.digestTxt.innerText = "🔥 消化中..."; ui.digestTxt.style.color = "#ff9800";
+                    if(Math.random() > 0.7) spawnParticle('food', 190, 260);
+                } else {
+                    ui.digestTxt.innerText = "⚪ 空置"; ui.digestTxt.style.color = "#aaa";
+                }
+                ui.valStomach.innerText = Math.floor(state.stomachContent) + "%";
+                state.energy -= (0.05 + activity/200);
+
+                let filterRate = (waterIn / 100) * 0.4; 
+                if (state.heartRate < 40) filterRate = 0; 
+                if (waterIn > 10) state.toxic = Math.max(0, state.toxic - filterRate); 
+                else state.toxic += 0.05; 
+                state.toxic += (activity * 0.005);
+                state.bladderLevel = Math.min(100, state.bladderLevel + filterRate * 2);
+
+                let stress = 0;
+                if (state.oxygen < 60) stress++;
+                if (state.energy < 20) stress++;
+                if (state.toxic > 60) stress++;
+
+                if (stress > 0) {
+                    ui.brain.classList.add('stress'); ui.brainMsg.style.opacity = 1;
+                    if(state.oxygen < 60) ui.brainMsg.innerText = "⚠️ 缺氧眩晕";
+                    else if(state.energy < 20) ui.brainMsg.innerText = "⚠️ 低血糖";
+                    else ui.brainMsg.innerText = "⚠️ 中毒反应";
+                } else {
+                    ui.brain.classList.remove('stress'); ui.brainMsg.style.opacity = 0;
+                }
+                updateUI();
+                updateVisuals(waterIn);
+                checkVitalSigns();
+            }
+
+            function updateUI() {
+                ui.valO2.innerText = Math.floor(state.oxygen) + "%"; ui.barO2.style.width = state.oxygen + "%";
+                ui.valEn.innerText = Math.floor(state.energy) + "%"; ui.barEn.style.width = state.energy + "%";
+                ui.valBpm.innerText = Math.floor(state.heartRate); ui.barBpm.style.width = Math.min(100, (state.heartRate/200)*100) + "%";
+                ui.valTox.innerText = Math.floor(state.toxic) + "%"; ui.barTox.style.width = state.toxic + "%";
+                ui.barBladder.style.width = state.bladderLevel + "%"; ui.barBladder.style.background = state.bladderLevel > 90 ? "red" : "yellow";
+            }
+
+            function checkVitalSigns() {
+                let reason = null;
+                if (state.oxygen <= 10) reason = "严重缺氧导致脑死亡";
+                if (state.energy <= 0) reason = "能量耗尽 (低血糖休克)";
+                if (state.toxic >= 100) reason = "尿毒症 (毒素过高)";
+                if (state.bladderLevel >= 100) reason = "膀胱破裂导致内出血";
+                if (state.heartRate > 220) reason = "心脏骤停 (心率过高)";
+                if (reason) {
+                    state.isDead = true;
+                    ui.overlay.style.display = 'block'; ui.failReason.innerText = reason;
+                    ui.statusTxt.innerText = "💀 已死亡"; ui.statusTxt.style.color = "red";
+                    clearInterval(timer); timer = null;
+                }
+            }
+
+            return {
+                init: () => { cacheDOM(); if (!timer) timer = setInterval(loop, 100); state.heartRate = 75; },
+                stop: () => { if (timer) clearInterval(timer); timer = null; },
+                eat: () => { if (state.isDead) return; state.stomachContent = Math.min(100, state.stomachContent + 30); },
+                pee: () => { if (state.isDead) return; state.bladderLevel = 0; state.toxic = Math.max(0, state.toxic - 5); },
+                reset: () => {
+                    cacheDOM();
+                    state = { oxygen: 98, energy: 80, toxic: 0, heartRate: 75, stomachContent: 0, bladderLevel: 0, isDead: false };
+                    ui.inputAct.value = 0; ui.inputWater.value = 50;
+                    ui.overlay.style.display = 'none';
+                    ui.statusTxt.innerText = "● 正常"; ui.statusTxt.style.color = "#66bb6a";
+                    HumanLab.init();
+                }
+            };
+        })();
+    </script>
+</body>
+</html>
